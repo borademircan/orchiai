@@ -1,0 +1,325 @@
+### Orchi AI API Tests
+### Use this file with VS Code REST Client extension or similar tools
+
+@baseUrl = http://localhost:3001
+@apiUrl = {{baseUrl}}/api/v1
+
+### ============================================
+### HEALTH & INFO
+### ============================================
+
+### Health Check
+GET {{baseUrl}}/health
+
+### API Info
+GET {{apiUrl}}
+
+### ============================================
+### AGENTS - CRUD
+### ============================================
+
+### List all agents
+GET {{apiUrl}}/agents
+
+### List agents with filters
+GET {{apiUrl}}/agents?isActive=true&limit=10&page=1
+
+### Search agents
+GET {{apiUrl}}/agents?search=helper
+
+### Create a new agent
+POST {{apiUrl}}/agents
+Content-Type: application/json
+
+{
+  "name": "Code Helper Agent",
+  "instructions": "You are an expert software engineer who helps developers write clean, efficient code. You provide detailed explanations and best practices."
+}
+
+### Create another agent
+POST {{apiUrl}}/agents
+Content-Type: application/json
+
+{
+  "name": "Data Analyst Agent",
+  "instructions": "You are a data analyst who helps interpret data, create visualizations, and provide insights.",
+  "memoryStrategy": "AUTO",
+  "memoryThreshold": 50
+}
+
+### Get specific agent (replace with actual ID)
+@agentId = 643740b9-a954-40bd-af11-1a64c4602361
+GET {{apiUrl}}/agents/{{agentId}}
+
+### Update agent
+PATCH {{apiUrl}}/agents/{{agentId}}
+Content-Type: application/json
+
+{
+  "name": "Updated Agent Name",
+  "instructions": "Updated instructions here",
+  "isActive": true
+}
+
+### Activate agent
+POST {{apiUrl}}/agents/{{agentId}}/activate
+
+### Deactivate agent
+POST {{apiUrl}}/agents/{{agentId}}/deactivate
+
+### Clone agent
+POST {{apiUrl}}/agents/{{agentId}}/clone
+Content-Type: application/json
+
+{
+  "name": "Cloned Agent"
+}
+
+### Delete agent
+DELETE {{apiUrl}}/agents/{{agentId}}
+
+### ============================================
+### CONSULT RULES
+### ============================================
+
+### Get consult rules for an agent
+GET {{apiUrl}}/agents/{{agentId}}/consults
+
+### Add a consult rule (needs 2 agents)
+@consultedAgentId = <another-agent-id>
+POST {{apiUrl}}/agents/{{agentId}}/consults
+Content-Type: application/json
+
+{
+  "consultedAgentId": "{{consultedAgentId}}",
+  "whenCondition": "ALWAYS",
+  "purpose": "Get additional perspective on the response",
+  "order": 0
+}
+
+### Update consult rule
+@consultId = <consult-rule-id>
+PATCH {{apiUrl}}/agents/{{agentId}}/consults/{{consultId}}
+Content-Type: application/json
+
+{
+  "whenCondition": "CONDITIONAL",
+  "conditionalRule": "if user asks for detailed analysis",
+  "order": 1
+}
+
+### Reorder consult rules
+POST {{apiUrl}}/agents/{{agentId}}/consults/reorder
+Content-Type: application/json
+
+{
+  "ruleIds": ["<rule1-id>", "<rule2-id>", "<rule3-id>"]
+}
+
+### Delete consult rule
+DELETE {{apiUrl}}/agents/{{agentId}}/consults/{{consultId}}
+
+### ============================================
+### TOOLS (when implemented)
+### ============================================
+
+### Get agent's tools
+GET {{apiUrl}}/agents/{{agentId}}/tools
+
+### Attach tool to agent
+@toolId = <tool-id>
+POST {{apiUrl}}/agents/{{agentId}}/tools
+Content-Type: application/json
+
+{
+  "toolId": "{{toolId}}"
+}
+
+### Detach tool from agent
+DELETE {{apiUrl}}/agents/{{agentId}}/tools/{{toolId}}
+
+### ============================================
+### ERROR TESTING
+### ============================================
+
+### Test 404 - Not Found
+GET {{apiUrl}}/nonexistent
+
+### Test validation error - missing required field
+POST {{apiUrl}}/agents
+Content-Type: application/json
+
+{
+  "name": "Test"
+}
+
+### Test validation error - invalid UUID
+GET {{apiUrl}}/agents/invalid-uuid
+
+### Test duplicate prevention
+POST {{apiUrl}}/agents
+Content-Type: application/json
+
+{
+  "name": "Duplicate Test",
+  "instructions": "First one"
+}
+
+###
+POST {{apiUrl}}/agents
+Content-Type: application/json
+
+{
+  "name": "Duplicate Test",
+  "instructions": "Second one"
+}
+
+### ============================================
+### PHASE 4: EXECUTION FEATURES
+### ============================================
+
+### ============================================
+### PROVIDER CONNECTIONS
+### ============================================
+
+### List provider connections
+GET {{apiUrl}}/provider-connections
+
+### Create OpenAI provider connection
+POST {{apiUrl}}/provider-connections
+Content-Type: application/json
+
+{
+  "name": "OpenAI Production",
+  "provider": "OPENAI",
+  "apiKey": "sk-your-api-key-here"
+}
+
+### Create Anthropic provider connection
+POST {{apiUrl}}/provider-connections
+Content-Type: application/json
+
+{
+  "name": "Anthropic Production",
+  "provider": "ANTHROPIC",
+  "apiKey": "sk-ant-your-api-key-here"
+}
+
+### Get provider connection by ID
+@connectionId = <connection-id>
+GET {{apiUrl}}/provider-connections/{{connectionId}}
+
+### Update provider connection
+PATCH {{apiUrl}}/provider-connections/{{connectionId}}
+Content-Type: application/json
+
+{
+  "name": "Updated Connection Name"
+}
+
+### Get connections by provider
+GET {{apiUrl}}/provider-connections/provider/OPENAI
+
+### Delete provider connection
+DELETE {{apiUrl}}/provider-connections/{{connectionId}}
+
+### ============================================
+### MODEL CONNECTION TESTING
+### ============================================
+
+### Test model connection
+@modelId = <model-id>
+POST {{apiUrl}}/models/{{modelId}}/test
+
+### ============================================
+### TOOL EXECUTION
+### ============================================
+
+### Execute tool
+@toolId = <tool-id>
+POST {{apiUrl}}/tools/{{toolId}}/execute
+Content-Type: application/json
+
+{
+  "parameters": {
+    "message": "Hello from tool execution",
+    "param2": "value2"
+  }
+}
+
+### Test tool connection
+POST {{apiUrl}}/tools/{{toolId}}/test
+
+### ============================================
+### TRIGGER EXECUTION
+### ============================================
+
+### Execute chat trigger
+@triggerId = <trigger-id>
+POST {{apiUrl}}/triggers/{{triggerId}}/execute/chat
+Content-Type: application/json
+
+{
+  "message": "Hello, this is a test message",
+  "sessionId": "session-123",
+  "userId": "user-456"
+}
+
+### Execute webhook trigger
+@webhookTriggerId = <webhook-trigger-id>
+POST {{apiUrl}}/triggers/{{webhookTriggerId}}/execute/webhook
+Content-Type: application/json
+X-Signature: sha256=<hmac-signature>
+
+{
+  "event": "user.created",
+  "data": {
+    "userId": "123",
+    "email": "user@example.com"
+  }
+}
+
+### Execute scheduled trigger manually
+@scheduledTriggerId = <scheduled-trigger-id>
+POST {{apiUrl}}/triggers/{{scheduledTriggerId}}/execute/scheduled
+
+### Validate trigger configuration
+POST {{apiUrl}}/triggers/{{triggerId}}/validate
+
+### ============================================
+### AGENT EXECUTION (AgentRuntime)
+### ============================================
+
+### Execute agent directly
+POST {{apiUrl}}/agents/{{agentId}}/execute
+Content-Type: application/json
+
+{
+  "userMessage": "Hello, I need help with a coding question",
+  "sessionId": "session-789",
+  "context": {
+    "language": "TypeScript",
+    "framework": "Express"
+  },
+  "metadata": {
+    "source": "api-test",
+    "timestamp": "2025-01-27T10:00:00Z"
+  }
+}
+
+### Execute agent with simple message
+POST {{apiUrl}}/agents/{{agentId}}/execute
+Content-Type: application/json
+
+{
+  "userMessage": "What is the capital of France?"
+}
+
+### Execute agent with session context
+POST {{apiUrl}}/agents/{{agentId}}/execute
+Content-Type: application/json
+
+{
+  "userMessage": "Continue our previous conversation",
+  "sessionId": "existing-session-id"
+}

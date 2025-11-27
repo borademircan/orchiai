@@ -1,0 +1,304 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Provider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  CUSTOM
+}
+
+enum ToolType {
+  SEEDREAM
+  VEO
+  CRM
+  EMAIL
+  SOCIAL
+  WEBHOOK
+  CUSTOM
+}
+
+enum TriggerType {
+  CHAT
+  WEBHOOK
+  SCHEDULED
+}
+
+enum WhenCondition {
+  ALWAYS
+  CONDITIONAL
+  ONLY_IF_NEEDED
+}
+
+enum MemoryStrategy {
+  AUTO
+  ASK_USER
+  MANUAL_ONLY
+}
+
+enum MemoryType {
+  SHORT_TERM
+  LONG_TERM
+  SUMMARY
+}
+
+enum OrchestrationMode {
+  FLOW      // Structured workflow with orchestrator guidance
+  QA        // Free-form Q&A with agent swarm
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Agent {
+  id                  String             @id @default(uuid())
+  name                String
+  instructions        String             @db.Text
+  modelId             String?
+  memoryStrategy      MemoryStrategy     @default(MANUAL_ONLY)
+  memoryThreshold     Int                @default(100)
+  askBeforeSaving     Boolean            @default(false)
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  model        ModelProfile?   @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  consultRules AgentConsult[]  @relation("PrimaryAgent")
+  consultedBy  AgentConsult[]  @relation("ConsultedAgent")
+  tools        AgentTool[]
+  triggers     Trigger[]
+  chatSessions ChatSession[]
+  memoryItems  MemoryItem[]
+
+  @@index([isActive])
+  @@index([modelId])
+}
+
+model AgentConsult {
+  id                String        @id @default(uuid())
+  agentId           String
+  consultedAgentId  String
+  whenCondition     WhenCondition @default(ALWAYS)
+  conditionalRule   String?       @db.Text
+  purpose           String        @db.Text
+  order             Int           @default(0)
+  createdAt         DateTime      @default(now())
+
+  agent          Agent @relation("PrimaryAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  consultedAgent Agent @relation("ConsultedAgent", fields: [consultedAgentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, consultedAgentId])
+  @@index([agentId])
+  @@index([consultedAgentId])
+}
+
+// ============================================
+// MODEL & PROVIDER MANAGEMENT
+// ============================================
+
+model ModelProfile {
+  id           String   @id @default(uuid())
+  name         String
+  provider     Provider
+  modelId      String
+  endpoint     String?
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(4000)
+  connectionId String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  connection ProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  agents     Agent[]
+
+  @@index([provider])
+  @@index([isActive])
+}
+
+model ProviderConnection {
+  id            String   @id @default(uuid())
+  name          String
+  type          String?  // Connection type (e.g., "openai", "anthropic", "http", "oauth2", etc.) - optional for generic connections
+  apiKey        String   // Encrypted
+  encryptionKey String   // For decrypting apiKey
+  endpoint      String?  // Optional endpoint URL
+  metadata      Json?    // Additional credential data (username, password, tokens, etc.)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  models ModelProfile[]
+
+  @@index([type])
+}
+
+// ============================================
+// TOOLS
+// ============================================
+
+model Tool {
+  id          String     @id @default(uuid())
+  name        String
+  description String     @db.Text
+  type        ToolType
+  endpoint    String?
+  method      HttpMethod @default(POST)
+  schema      Json
+  connectionId String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  agents AgentTool[]
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model AgentTool {
+  agentId   String
+  toolId    String
+  createdAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tool  Tool  @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, toolId])
+  @@index([agentId])
+  @@index([toolId])
+}
+
+// ============================================
+// TRIGGERS
+// ============================================
+
+model Trigger {
+  id          String      @id @default(uuid())
+  name        String
+  type        TriggerType
+  agentId     String
+  config      Json // Chat route, webhook URL, cron expression, etc.
+  isEnabled   Boolean     @default(true)
+  secretToken String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([isEnabled])
+  @@index([agentId])
+}
+
+// ============================================
+// CHAT & SESSIONS
+// ============================================
+
+model ChatSession {
+  id                String            @id @default(uuid())
+  agentId           String
+  userId            String?
+  title             String?           // AI-generated title based on conversation content
+  orchestrationMode OrchestrationMode @default(FLOW) // Flow or Q&A mode for this chat
+  startedAt         DateTime          @default(now())
+  lastMessageAt     DateTime          @default(now())
+  metadata          Json?
+
+  agent    Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([agentId])
+  @@index([userId])
+  @@index([startedAt])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  sessionId String
+  role      MessageRole
+  content   String      @db.Text
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// ============================================
+// MEMORY
+// ============================================
+
+model MemoryItem {
+  id        String     @id @default(uuid())
+  agentId   String
+  type      MemoryType
+  content   String     @db.Text
+  metadata  Json?
+  createdAt DateTime   @default(now())
+  expiresAt DateTime?
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+// ============================================
+// AUDIT & LOGGING (Optional but recommended)
+// ============================================
+
+model ExecutionLog {
+  id                 String   @id @default(uuid())
+  agentId            String
+  triggerId          String?
+  sessionId          String?
+  input              Json
+  output             Json
+  consultsExecuted   Json? // Array of consult execution details
+  toolCalls          Json? // Array of tool calls
+  executionTimeMs    Int
+  success            Boolean
+  errorMessage       String?  @db.Text
+  createdAt          DateTime @default(now())
+
+  @@index([agentId])
+  @@index([triggerId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([success])
+}
